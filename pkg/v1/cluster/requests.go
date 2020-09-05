@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	v1 "github.com/selectel/mks-go/pkg/v1"
+	"gopkg.in/yaml.v2"
 )
 
 // Get returns a single cluster by its id.
@@ -136,15 +137,24 @@ func Delete(ctx context.Context, client *v1.ServiceClient, clusterID string) (*v
 	return responseResult, err
 }
 
-// GetKubeconfig returns a kubeconfig by cluster id.
-func GetKubeconfig(ctx context.Context, client *v1.ServiceClient, clusterID string) ([]byte, *v1.ResponseResult, error) {
+func GetKubeconfigRequest(ctx context.Context, client *v1.ServiceClient, clusterID string) (*v1.ResponseResult, error) {
 	url := strings.Join([]string{client.Endpoint, v1.ResourceURLCluster, clusterID, v1.ResourceURLKubeconfig}, "/")
 	responseResult, err := client.DoRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if responseResult.Err != nil {
-		return nil, responseResult, responseResult.Err
+		return responseResult, responseResult.Err
+	}
+
+	return responseResult, nil
+}
+
+// GetKubeconfig returns a kubeconfig by cluster id.
+func GetKubeconfig(ctx context.Context, client *v1.ServiceClient, clusterID string) ([]byte, *v1.ResponseResult, error) {
+	responseResult, err := GetKubeconfigRequest(ctx, client, clusterID)
+	if err != nil {
+		return nil, responseResult, err
 	}
 
 	// Extract kubeconfig from the response body.
@@ -154,6 +164,23 @@ func GetKubeconfig(ctx context.Context, client *v1.ServiceClient, clusterID stri
 	}
 
 	return kubeconfig, responseResult, nil
+}
+
+func GetKubeconfigStruct(ctx context.Context, client *v1.ServiceClient, clusterID string) (*Kubeconfig, *v1.ResponseResult, error) {
+	kubeconfig, responseResult, err := GetKubeconfig(ctx, client, clusterID)
+	if err != nil {
+		return nil, responseResult, err
+	}
+
+	// Extract kubeconfig from the response body.
+	var kubeConfigStruct Kubeconfig
+	kubeConfigStruct.Raw = kubeconfig
+	err = yaml.Unmarshal(kubeconfig, &kubeConfigStruct)
+	if err != nil {
+		return nil, responseResult, err
+	}
+
+	return &kubeConfigStruct, responseResult, nil
 }
 
 // RotateCerts requests a rotation of cluster certificates by cluster id.

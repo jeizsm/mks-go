@@ -9,6 +9,7 @@ import (
 	"github.com/selectel/mks-go/pkg/testutils"
 	v1 "github.com/selectel/mks-go/pkg/v1"
 	"github.com/selectel/mks-go/pkg/v1/cluster"
+	"gopkg.in/yaml.v2"
 )
 
 func TestGetCluster(t *testing.T) {
@@ -937,7 +938,55 @@ func TestGetKubeconfig(t *testing.T) {
 	}
 }
 
-func TestGetKubeconfigHTTPError(t *testing.T) {
+func TestGetKubeconfigStruct(t *testing.T) {
+	endpointCalled := false
+	testEnv := testutils.SetupTestEnv()
+	defer testEnv.TearDownTestEnv()
+
+	testutils.HandleReqWithoutBody(t, &testutils.HandleReqOpts{
+		Mux:         testEnv.Mux,
+		URL:         "/v1/clusters/dcd7559a-55d8-4f65-9230-6a22b985ff73/kubeconfig",
+		RawResponse: testGetKubeconfig,
+		Method:      http.MethodGet,
+		Status:      http.StatusOK,
+		CallFlag:    &endpointCalled,
+	})
+
+	ctx := context.Background()
+	testClient := &v1.ServiceClient{
+		HTTPClient: &http.Client{},
+		TokenID:    testutils.TokenID,
+		Endpoint:   testEnv.Server.URL + "/v1",
+		UserAgent:  testutils.UserAgent,
+	}
+	id := "dcd7559a-55d8-4f65-9230-6a22b985ff73"
+
+	actual, httpResponse, err := cluster.GetKubeconfigStruct(ctx, testClient, id)
+
+	var testGetKubeconfigStruct cluster.Kubeconfig
+	testGetKubeconfigStruct.Raw = []byte(testGetKubeconfig)
+	err = yaml.Unmarshal([]byte(testGetKubeconfig), &testGetKubeconfigStruct)
+	expected := &testGetKubeconfigStruct
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !endpointCalled {
+		t.Fatal("endpoint wasn't called")
+	}
+	if httpResponse == nil {
+		t.Fatal("expected an HTTP response from the GetKubeconfig method")
+	}
+	if httpResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected %d status in the HTTP response, but got %d",
+			http.StatusOK, httpResponse.StatusCode)
+	}
+	if !reflect.DeepEqual(expected, actual) {
+		t.Fatalf("expected %#v, but got %#v", expected, actual)
+	}
+}
+
+func TestGetKubeconfigRequestHTTPError(t *testing.T) {
 	endpointCalled := false
 	testEnv := testutils.SetupTestEnv()
 	defer testEnv.TearDownTestEnv()
@@ -960,13 +1009,10 @@ func TestGetKubeconfigHTTPError(t *testing.T) {
 	}
 	id := "dbe1150b-55d8-4f65-9230-6a22b985ff47"
 
-	actual, httpResponse, err := cluster.GetKubeconfig(ctx, testClient, id)
+	httpResponse, err := cluster.GetKubeconfigRequest(ctx, testClient, id)
 
 	if !endpointCalled {
 		t.Fatal("endpoint wasn't called")
-	}
-	if actual != nil {
-		t.Fatal("expected no kubeconfig from the GetKubeconfig method")
 	}
 	if httpResponse == nil {
 		t.Fatal("expected an HTTP response from the GetKubeconfig method")
@@ -980,7 +1026,7 @@ func TestGetKubeconfigHTTPError(t *testing.T) {
 	}
 }
 
-func TestGetKubeconfigTimeoutError(t *testing.T) {
+func TestGetKubeconfigRequestTimeoutError(t *testing.T) {
 	testEnv := testutils.SetupTestEnv()
 	testEnv.Server.Close()
 	defer testEnv.TearDownTestEnv()
@@ -994,11 +1040,8 @@ func TestGetKubeconfigTimeoutError(t *testing.T) {
 	}
 	id := "dbe11593b-55d8-4f65-9230-6a22b985ff47"
 
-	actual, httpResponse, err := cluster.Get(ctx, testClient, id)
+	httpResponse, err := cluster.GetKubeconfigRequest(ctx, testClient, id)
 
-	if actual != nil {
-		t.Fatal("expected no kubeconfig from the GetKubeconfig method")
-	}
 	if httpResponse != nil {
 		t.Fatal("expected no HTTP response from the GetKubeconfig method")
 	}

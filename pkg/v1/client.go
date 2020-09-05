@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -200,6 +202,16 @@ func (result *ResponseResult) ExtractRaw() ([]byte, error) {
 	defer result.Body.Close()
 
 	return bytes, nil
+}
+
+func (result *ResponseResult) ExtractYaml(to interface{}) error {
+	body, err := ioutil.ReadAll(result.Body)
+	if err != nil {
+		return err
+	}
+	defer result.Body.Close()
+
+	return yaml.Unmarshal(body, to)
 }
 
 // extractErr populates an error message and error structure in the ResponseResult body.
